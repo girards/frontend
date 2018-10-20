@@ -180,21 +180,6 @@ class FoodDetailScene extends Component {
                 <PreserveWhiteSpace>{this.props.service.subtitle}</PreserveWhiteSpace>
                 <ServiceTags service={this.props.service} />
                 <PreserveWhiteSpace>{this.props.service.description}</PreserveWhiteSpace>
-                {((this.props.service.startInstructions &&
-                  this.props.service.startInstructions !== 'none') ||
-                  (this.props.service.endInstructions &&
-                    this.props.service.endInstructions !== 'none')) && <h4>Instructions : </h4>}
-                <ul>
-                  {this.props.service.startInstructions &&
-                    this.props.service.startInstructions !== 'none' && (
-                      <li>On arrival : {this.props.service.startInstructions}</li>
-                    )}
-                  {this.props.service.endInstructions &&
-                    this.props.service.endInstructions !== 'none' && (
-                      <li>On departure : {this.props.service.endInstructions}</li>
-                    )}
-                </ul>
-                <br />
                 {this.props.service.rules &&
                   this.props.service.rules.length > 0 && (
                     <section>
