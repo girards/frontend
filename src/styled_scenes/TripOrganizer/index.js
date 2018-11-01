@@ -18,13 +18,18 @@ import { Page } from 'shared_components/layout/Page';
 import I18nText from 'shared_components/I18nText';
 
 import Itinerary from './Itinerary';
-import mapServicesToDays, { minutesToDays, dayTitles } from '../Trip/mapServicesToDays';
+import mapServicesToDays, {
+  minutesToDays,
+  dayTitles,
+  updateServiceDayNames,
+} from '../Trip/mapServicesToDays';
 import DaySelector from '../Trip/DaySelector';
 import CheckoutBox from './CheckoutBox';
 import SemanticLocationControl from 'shared_components/Form/SemanticLocationControl';
 import Button from 'shared_components/Button';
 import Input from 'shared_components/StyledInput';
 import debounce from 'lodash.debounce';
+import CancellationPolicy from 'shared_components/CancellationPolicy';
 
 const PageContent = styled.div`
   margin: 0 20px auto;
@@ -88,6 +93,11 @@ const TripItineraryTitle = styled.div`
   }
 `;
 
+const Cancellation = styled.div`
+  text-align: center;
+  margin-bottom: 20px;
+`;
+
 const Required = () => <span style={{ color: 'red' }}>*</span>;
 
 const daysToMinutes = days => days * 60 * 24;
@@ -139,7 +149,39 @@ function createTripState(props, state) {
     optionsSelected,
     daysByService,
     isCheckingList: [],
+    notes: props.trip.notes ? props.trip.notes : {},
   };
+}
+
+function pickFirstOption(data) {
+  return data.reduce((prev, value) => {
+    if (!value.groupedOptions || value.groupedOptions.options.length === 0) {
+      return prev;
+    }
+
+    if (!prev[value.day]) {
+      return {
+        ...prev,
+        [value.day]: {
+          [value.serviceId]: {
+            availabilityCode: value.groupedOptions.options[0].otherAttributes.availabilityCode.code,
+            price: value.groupedOptions.options[0].price,
+          },
+        },
+      };
+    }
+
+    return {
+      ...prev,
+      [value.day]: {
+        ...prev[value.day],
+        [value.serviceId]: {
+          availabilityCode: value.groupedOptions.options[0].otherAttributes.availabilityCode.code,
+          price: value.groupedOptions.options[0].price,
+        },
+      },
+    };
+  }, {});
 }
 
 const emptyTrip = {
@@ -163,8 +205,9 @@ export default class TripOrganizer extends Component {
         optionsSelected: {},
         availability: {},
         daysByService: {},
-        pictureUploadError: '',
+        pictureUploadError: null,
         isCheckingList: [],
+        notes: {},
       };
     }
   }
@@ -182,48 +225,29 @@ export default class TripOrganizer extends Component {
     if (
       props.availability &&
       (!(state.availability && state.availability.timestamp) ||
-        props.availability.timestamp === state.availability.timestamp)
+        props.availability.timestamp >= state.availability.timestamp)
     ) {
-      const optionsSelected =
-        props.availability.data &&
-        props.availability.data.reduce((prev, value) => {
-          if (!value.groupedOptions || value.groupedOptions.options.length === 0) {
-            return prev;
-          }
+      const optionsSelected = props.availability.data
+        ? pickFirstOption(props.availability.data)
+        : state.optionsSelected;
 
-          if (!prev[value.day]) {
-            return {
-              ...prev,
-              [value.day]: {
-                [value.serviceId]: {
-                  availabilityCode:
-                    value.groupedOptions.options[0].otherAttributes.availabilityCode.code,
-                  price: value.groupedOptions.options[0].price,
-                },
-              },
-            };
-          }
-
-          return {
-            ...prev,
-            [value.day]: {
-              ...prev[value.day],
-              [value.serviceId]: {
-                availabilityCode:
-                  value.groupedOptions.options[0].otherAttributes.availabilityCode.code,
-                price: value.groupedOptions.options[0].price,
-              },
-            },
-          };
-        }, {});
       newState = {
         ...newState,
         availability: props.availability,
-        optionsSelected: optionsSelected,
+        optionsSelected,
       };
     }
 
     return newState;
+  }
+
+  componentDidUpdate(prevProps) {
+    if (!prevProps.trip && this.props.trip) {
+      this.checkAllServicesAvailability({
+        startDate: this.props.startDate,
+        guests: this.props.numberOfPeople,
+      });
+    }
   }
 
   patchTrip = (action = 'autosave') => {
@@ -256,11 +280,18 @@ export default class TripOrganizer extends Component {
         otherAttributes: {
           selectedServiceOptions,
         },
-        services: this.state.days.reduce((prev, day) => [...prev, ...day.data], []),
+        services: this.state.days.reduce(
+          (prev, day) => [
+            ...prev,
+            ...day.data.map(dayData => ({ ...dayData, service: dayData.service._id })),
+          ],
+          [],
+        ),
         ...(this.props.startDate ? { startDate: this.props.startDate } : {}),
         ...(this.props.numberOfPeople ? { peopleCount: this.props.numberOfPeople } : {}),
-        duration: daysToMinutes(this.state.days.length) || 1,
+        duration: (this.state.days && daysToMinutes(this.state.days.length)) || 1,
         tags: this.state.trip.tags ? this.state.trip.tags.map(tag => tag._id) : [], // This could be done when loading the trip to avoid executing each time we save
+        notes: this.state.notes,
       };
 
       await axios.patch(`/trips/${trip._id}`, trip);
@@ -339,7 +370,6 @@ export default class TripOrganizer extends Component {
               {
                 day,
                 priority: 1,
-                notes: [],
                 service,
               },
             ],
@@ -358,6 +388,7 @@ export default class TripOrganizer extends Component {
               .format('YYYY-MM-DD'),
             peopleCount: this.props.numberOfPeople,
           }));
+
         this.setState(prevState => ({
           ...(this.props.startDate
             ? {
@@ -377,6 +408,21 @@ export default class TripOrganizer extends Component {
                 isCheckingList: prevState.isCheckingList.filter(
                   value => value !== `${day}-${service._id}`,
                 ),
+                ...(availability.data.groupedOptions &&
+                  availability.data.groupedOptions.options.length > 0 && {
+                    optionsSelected: {
+                      ...prevState.optionsSelected,
+                      [day]: {
+                        ...prevState.optionsSelected[day],
+                        [service._id]: {
+                          availabilityCode:
+                            availability.data.groupedOptions.options[0].otherAttributes
+                              .availabilityCode.code,
+                          price: availability.data.groupedOptions.options[0].price,
+                        },
+                      },
+                    },
+                  }),
               }
             : null),
         }));
@@ -436,13 +482,10 @@ export default class TripOrganizer extends Component {
   addNote = day => {
     this.setState(
       prevState => ({
-        trip: {
-          ...prevState.trip,
-          notes: {
-            ...prevState.trip.notes,
-            [day]: {
-              'en-us': '',
-            },
+        notes: {
+          ...prevState.notes,
+          [day]: {
+            'en-us': '',
           },
         },
       }),
@@ -453,37 +496,31 @@ export default class TripOrganizer extends Component {
   editNote = debounce((day, text) => {
     this.setState(
       prevState => ({
-        trip: {
-          ...prevState.trip,
-          notes: {
-            ...prevState.trip.notes,
-            [day]: {
-              'en-us': text,
-            },
+        notes: {
+          ...prevState.notes,
+          [day]: {
+            'en-us': text,
           },
         },
       }),
-      this.autoPatchTrip,
+      this.patchTrip,
     );
-  }, 2000);
+  }, 500);
 
   deleteNote = day => {
     this.setState(prevState => {
-      const notes = Object.keys(prevState.trip.notes).reduce((prevNotes, value) => {
+      const notes = Object.keys(prevState.notes).reduce((prevNotes, value) => {
         if (value === String(day)) {
           return prevNotes;
         }
         return {
           ...prevNotes,
-          [value]: prevState.trip.notes[value],
+          [value]: prevState.notes[value],
         };
       }, {});
 
       return {
-        trip: {
-          ...prevState.trip,
-          notes,
-        },
+        notes,
       };
     }, this.autoPatchTrip);
   };
@@ -498,15 +535,33 @@ export default class TripOrganizer extends Component {
     this.childRefs = refs;
   };
 
+  checkSingleService = async (data, startDate, guests) => {
+    try {
+      const result = await axios.post(`/services/${data.service._id}/availability`, {
+        bookingDate: startDate
+          .clone()
+          .add(data.day - 1, 'days')
+          .format('YYYY-MM-DD'),
+        peopleCount: guests,
+      });
+      return result;
+    } catch (e) {
+      // Retry!
+      return this.checkSingleService(data, startDate, guests);
+    }
+  };
+
   checkAllServicesAvailability = ({ startDate, guests }) => {
     const timestamp = new Date().getTime();
     this.setState(
       prevState => ({
         availability: {
           ...prevState.availability,
+          data: [],
           isChecking: true,
           timestamp,
         },
+        optionsSelected: {},
         isCheckingList: [],
       }),
       async () => {
@@ -516,30 +571,27 @@ export default class TripOrganizer extends Component {
             ...day.data.map(data => ({
               serviceId: data.service._id,
               day: day.day,
-              request: axios.post(`/services/${data.service._id}/availability`, {
-                bookingDate: startDate
-                  .clone()
-                  .add(data.day - 1, 'days')
-                  .format('YYYY-MM-DD'),
-                peopleCount: guests,
-              }),
+              request: this.checkSingleService(data, startDate, guests),
             })),
           ],
           [],
         );
         const availability = await Promise.all(days.map(day => day.request));
+        const data = days.map((day, index) => ({
+          day: day.day,
+          serviceId: day.serviceId,
+          ...availability[index].data,
+        }));
+        const optionsSelected = pickFirstOption(data);
 
         this.setState({
           availability: {
-            data: days.map((day, index) => ({
-              day: day.day,
-              serviceId: day.serviceId,
-              ...availability[index].data,
-            })),
+            data,
             error: null,
             isChecking: false,
             timestamp,
           },
+          optionsSelected,
         });
       },
     );
@@ -552,9 +604,9 @@ export default class TripOrganizer extends Component {
     });
     this.props.changeDates(dates);
     this.autoPatchTrip();
-    this.setState({
-      days: mapServicesToDays(this.props.trip.services, this.props.trip.duration, dates.start_date),
-    });
+    this.setState(prevState => ({
+      days: updateServiceDayNames(prevState.days, dates.start_date),
+    }));
   };
 
   changeGuests = data => {
@@ -646,7 +698,9 @@ export default class TripOrganizer extends Component {
     }
 
     const checkingAvailability =
-      this.state.availability.isChecking || this.state.isCheckingList.length > 0;
+      this.state.availability.isChecking ||
+      this.state.isCheckingList.length > 0 ||
+      !this.state.availability.data;
 
     if (checkingAvailability) {
       return 'We are checking the availability of the selected services';
@@ -710,6 +764,7 @@ export default class TripOrganizer extends Component {
       prev => ({
         trip: {
           ...prev.trip,
+          pictureUploadError: null,
           media: [
             {
               type: 'image',
@@ -777,8 +832,8 @@ export default class TripOrganizer extends Component {
           };
         }, {});
 
-        const notes = Object.keys(prevState.trip.notes).reduce((prevNotes, value) => {
-          if (value === day.day) {
+        const notes = Object.keys(prevState.notes).reduce((prevNotes, value) => {
+          if (Number(value) === day.day) {
             return prevNotes;
           }
 
@@ -786,7 +841,7 @@ export default class TripOrganizer extends Component {
 
           return {
             ...prevNotes,
-            [newKey]: prevState.trip.notes[value],
+            [newKey]: prevState.notes[value],
           };
         }, {});
 
@@ -794,8 +849,8 @@ export default class TripOrganizer extends Component {
           trip: {
             ...prevState.trip,
             duration: prevState.trip.duration - daysToMinutes(1),
-            notes,
           },
+          notes,
           optionsSelected,
           daysByService,
           days: prevState.days.filter(prevDay => prevDay.day !== day.day).map(
@@ -829,6 +884,7 @@ export default class TripOrganizer extends Component {
       optionsSelected,
       pictureUploadError,
       isCheckingList,
+      notes,
     } = this.state;
 
     const hero = trip.media.find(media => media.hero) || trip.media[0];
@@ -851,7 +907,7 @@ export default class TripOrganizer extends Component {
 
     return (
       <React.Fragment>
-        {pictureUploadError.length > 0 && (
+        {pictureUploadError && (
           <Message negative>
             <Message.Header>An error occured</Message.Header>
             <p>{pictureUploadError}</p>
@@ -916,6 +972,7 @@ export default class TripOrganizer extends Component {
           assignRefsToParent={this.assignRefs}
           days={days}
           optionsSelected={optionsSelected}
+          notes={notes}
           selectOption={this.selectOption}
           addService={this.addService}
           removeService={this.removeService}
@@ -925,6 +982,9 @@ export default class TripOrganizer extends Component {
           editNote={this.editNote}
           deleteNote={this.deleteNote}
         />
+        <Cancellation>
+          <CancellationPolicy />
+        </Cancellation>
       </React.Fragment>
     );
   };

@@ -50,7 +50,7 @@ class Payment extends React.Component {
   };
 
   render() {
-    const { trip } = this.props;
+    const { trip, error, getProvisionCodes } = this.props;
     if (!trip || !trip._id) return null;
     const totalPrice = trip.basePrice * (trip.numberOfPerson || 1);
     return (
@@ -70,6 +70,9 @@ class Payment extends React.Component {
           onStripeTokenReceived={this.onStripeTokenReceived}
           paymentError={this.props.paymentError || this.state.paymentError}
           guests={this.props.guests}
+          showStripe={Boolean(this.props.stripe)}
+          error={error}
+          getProvisionCodes={getProvisionCodes}
         />
       </PaymentContext.Provider>
     );

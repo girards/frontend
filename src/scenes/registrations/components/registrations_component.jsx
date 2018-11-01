@@ -67,6 +67,11 @@ const RegistrationsComponent = props => {
                   <div className="login-img-content">Plan your next trip with us!</div>
                 </Grid.Column>
                 <Grid.Column width="6" floated="right">
+                  {props.message && (
+                    <Message floating warning>
+                      {props.message}
+                    </Message>
+                  )}
                   <div className="login-header">Create your new account</div>
                   <br />
                   {Object.keys(props.errors).length !== 0 && (
@@ -144,7 +149,16 @@ const RegistrationsComponent = props => {
 
                   <div className="login-q-text">
                     Already have an account ?&nbsp;&nbsp;
-                    <Link to="/login" replace>
+                    <Link
+                      to={{
+                        pathname: '/login',
+                        state: {
+                          message: props.message,
+                          from: props.from,
+                          action: props.action,
+                        },
+                      }}
+                    >
                       Sign In
                     </Link>
                   </div>

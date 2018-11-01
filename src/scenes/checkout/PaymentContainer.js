@@ -6,13 +6,26 @@ import { stripeKey } from 'libs/config';
 /**
  * Builds up the higher level blocks of the page
  */
+const Wrapper = ({ apiKey, children }) => {
+  if (apiKey) {
+    return <StripeProvider apiKey={apiKey}>{children}</StripeProvider>;
+  }
+
+  return children;
+};
 const PaymentContainer = props => {
   return (
-    <StripeProvider apiKey={stripeKey}>
+    <Wrapper apiKey={stripeKey}>
       <Elements>
-        <Payment nextStep={props.nextStep} guests={props.guests} trip={props.trip} />
+        <Payment
+          getProvisionCodes={props.getProvisionCodes}
+          error={props.error}
+          nextStep={props.nextStep}
+          guests={props.guests}
+          trip={props.trip}
+        />
       </Elements>
-    </StripeProvider>
+    </Wrapper>
   );
 };
 

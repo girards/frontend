@@ -2,6 +2,7 @@
 import React, { Component } from 'react';
 import styled from 'styled-components';
 import { Link } from 'react-router-dom';
+import { withRouter } from 'react-router';
 
 // COMPONENTS
 import Row from '../../../shared_components/layout/Row';
@@ -45,7 +46,7 @@ const LoaderWithMargin = styled.section`
 `;
 
 // MODULE
-export default class Results extends Component {
+class Results extends Component {
   constructor(props) {
     super(props);
 
@@ -92,13 +93,14 @@ export default class Results extends Component {
       resultsCount: this.props.search_query.resultsCount || 0,
       limit: this.props.search_query.limit || 0,
       sortBy: this.props.search_query.sortBy,
+      radiusInKm: this.props.search_query.radiusInKm,
     };
   }
 
   refetch_results(param_object) {
     const query_params = this.get_query_params();
     query_params[Object.keys(param_object)[0]] = param_object[Object.keys(param_object)[0]];
-    this.props.update_path(query_params);
+    this.props.update_path(query_params, this.props.history);
   }
 
   loadData = item => {
@@ -109,6 +111,7 @@ export default class Results extends Component {
   };
 
   render() {
+    const { onCardOver, onCardLeave } = this.props;
     return (
       <Wrap>
         <Row>
@@ -140,7 +143,14 @@ export default class Results extends Component {
                       }
                     >
                       {result.contractAddress && <Badge>Decentralized</Badge>}
-                      <TripCard key={result.label} withTooltip withShadow item={result} />
+                      <TripCard
+                        key={result.label}
+                        onOver={onCardOver}
+                        onLeave={onCardLeave}
+                        withTooltip
+                        withShadow
+                        item={result}
+                      />
                     </Link>
                   </ResultItem>
                 </Grid.Column>
@@ -169,3 +179,5 @@ export default class Results extends Component {
     );
   }
 }
+
+export default withRouter(Results);

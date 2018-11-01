@@ -55,6 +55,19 @@ export const DropArrow = SvgWithProps(({ ariaHidden, focusable, role, style }) =
   </svg>
 ));
 
+export const LeftArrow = SvgWithProps(({ ariaHidden, focusable, role, style }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    aria-hidden={ariaHidden}
+    focusable={focusable.toString()}
+    role={role}
+    style={style}
+  >
+    <path d="M14,7L9,12L14,17V7Z" />
+  </svg>
+));
+
 export const PinIcon = SvgWithProps(({ ariaHidden, focusable, role, style }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -359,4 +372,17 @@ export const TrashCan = SvgWithProps(({ ariaHidden, focusable, role, style }) =>
   </svg>
 ));
 
-export const Logo = ({ style }) => <img src="/please-logo.svg" width="90%" style={style} alt="" />;
+export const CheckIcon = SvgWithProps(({ ariaHidden, focusable, role, style }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    aria-hidden={ariaHidden}
+    focusable={focusable.toString()}
+    role={role}
+    style={style}
+    viewBox="0 0 24 24"
+  >
+    <path d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z" />
+  </svg>
+));
+
+export const Logo = ({ style }) => <img src="/please-logo.svg" width="100%" style={style} alt="" />;
